@@ -1,0 +1,16 @@
+{
+  "name": "mock-san-tmdt",
+  "version": "1.0.0",
+  "description": "Mock server giả lập API Shopee Open Platform & TikTok Shop để demo phần mềm",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}

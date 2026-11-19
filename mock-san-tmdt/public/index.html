@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sàn ảo Demo — Shopee & TikTok Shop</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f5f6f8; margin:0; padding:24px; color:#1f2430; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color:#667; margin-bottom: 20px; font-size: 13px; }
+  .panel { background:#fff; border-radius:10px; padding:16px 18px; margin-bottom:16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
+  select, input[type=text], input[type=number] { padding:7px 10px; border:1px solid #d7dae0; border-radius:6px; font-size:13px; }
+  button { padding:7px 14px; border:none; border-radius:6px; background:#ee4d2d; color:#fff; font-size:13px; cursor:pointer; }
+  button.secondary { background:#555f73; }
+  button.ghost { background:#eee; color:#333; }
+  button:hover { opacity:0.9; }
+  table { width:100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid #eee; vertical-align: top; }
+  th { color:#667; font-weight:600; }
+  .badge { padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+  .b-shopee { background:#ffe8e0; color:#ee4d2d; }
+  .b-tiktok { background:#e8e8e8; color:#111; }
+  .s-PENDING { background:#fff3cd; color:#8a6d00; }
+  .s-CONFIRMED { background:#d8ecff; color:#0a5db5; }
+  .s-SHIPPING { background:#dcefff; color:#0b61a4; }
+  .s-COMPLETED { background:#d9f7e4; color:#0b7a3b; }
+  .s-CANCELLED { background:#fde0e0; color:#b5260a; }
+  .status-pill { padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+  .muted { color:#99a; font-size:12px; }
+  .actions button { margin-right:4px; margin-bottom:4px; }
+  code { background:#f1f1f3; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<h1>🛒 Sàn ảo Demo — Shopee &amp; TikTok Shop</h1>
+<div class="sub">Mock server giả lập API hai sàn để demo phần mềm, không phụ thuộc tài khoản thật.</div>
+
+<div class="panel">
+  <div class="row">
+    <label>Tạo đơn mẫu:</label>
+    <select id="platformSelect">
+      <option value="shopee">Shopee</option>
+      <option value="tiktok">TikTok Shop</option>
+    </select>
+    <input type="number" id="countInput" value="5" min="1" max="50" style="width:70px" />
+    <button onclick="createRandom()">+ Tạo đơn ngẫu nhiên</button>
+    <button class="ghost" onclick="resetAll()">Xóa toàn bộ đơn</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <label>Webhook URL của phần mềm bạn (nhận push khi đơn đổi trạng thái):</label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <input type="text" id="webhookInput" placeholder="https://your-ngrok-url.ngrok-free.app/webhook" style="flex:1; min-width:280px" />
+    <button class="secondary" onclick="saveWebhook()">Lưu</button>
+    <span class="muted" id="webhookStatus"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row"><strong>🔗 Kết nối Sapo (đẩy đơn demo thành đơn thật)</strong></div>
+  <div class="row" style="margin-top:8px">
+    <input type="text" id="sapoDomain" placeholder="ten-cua-hang.mysapo.net" style="width:220px" />
+    <input type="text" id="sapoApiKey" placeholder="API Key" style="width:200px" />
+    <input type="text" id="sapoApiSecret" placeholder="API Secret" style="width:200px" />
+    <button class="secondary" onclick="saveSapoConfig()">Lưu cấu hình Sapo</button>
+    <span class="muted" id="sapoStatus"></span>
+  </div>
+  <div class="muted" style="margin-top:6px">
+    Lấy API Key/Secret tại: Sapo Admin → Ứng dụng → Ứng dụng riêng → Tạo ứng dụng riêng
+    (chọn quyền "Đơn hàng, giao dịch và vận chuyển" = Đọc và ghi).
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <label>Lọc theo sàn:</label>
+    <select id="filterSelect" onchange="loadOrders()">
+      <option value="all">Tất cả</option>
+      <option value="shopee">Shopee</option>
+      <option value="tiktok">TikTok Shop</option>
+    </select>
+    <button class="ghost" onclick="loadOrders()">↻ Làm mới</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Mã đơn</th>
+        <th>Sàn</th>
+        <th>Khách hàng</th>
+        <th>Sản phẩm</th>
+        <th>Tổng tiền</th>
+        <th>Trạng thái</th>
+        <th>Sapo</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody id="ordersBody"></tbody>
+  </table>
+</div>
+
+<script>
+const fmt = (n) => n.toLocaleString("vi-VN") + "đ";
+
+async function loadOrders() {
+  const platform = document.getElementById("filterSelect").value;
+  const res = await fetch(`/admin/orders?platform=${platform}`);
+  const { orders } = await res.json();
+  const tbody = document.getElementById("ordersBody");
+  tbody.innerHTML = "";
+  if (orders.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">Chưa có đơn nào. Nhấn "Tạo đơn ngẫu nhiên" ở trên.</td></tr>`;
+    return;
+  }
+  for (const o of orders) {
+    const items = o.items.map(it => `${it.name} ×${it.quantity}`).join("<br/>");
+    const canAdvance = o.status !== "COMPLETED" && o.status !== "CANCELLED";
+    tbody.innerHTML += `
+      <tr>
+        <td><code>${o.id}</code></td>
+        <td><span class="badge b-${o.platform}">${o.platform === "shopee" ? "Shopee" : "TikTok Shop"}</span></td>
+        <td>${o.buyer_name}<br/><span class="muted">${o.buyer_phone}</span></td>
+        <td>${items}</td>
+        <td>${fmt(o.total_amount)}</td>
+        <td><span class="status-pill s-${o.status}">${o.status}</span></td>
+        <td>${o.sapo_order_id ? `<span class="muted">✅ ${o.sapo_order_name || o.sapo_order_id}</span>` : `<span class="muted">—</span>`}</td>
+        <td class="actions">
+          ${canAdvance ? `<button onclick="advance('${o.id}')">Chuyển trạng thái tiếp</button>` : ""}
+          ${canAdvance ? `<button class="ghost" onclick="cancelOrder('${o.id}')">Hủy đơn</button>` : ""}
+          ${!o.sapo_order_id ? `<button class="secondary" onclick="pushToSapo('${o.id}')">Đẩy vào Sapo</button>` : `<button class="ghost" onclick="removeFromSapo('${o.id}')">Xóa khỏi Sapo</button>`}
+        </td>
+      </tr>`;
+  }
+}
+
+async function createRandom() {
+  const platform = document.getElementById("platformSelect").value;
+  const count = document.getElementById("countInput").value;
+  await fetch("/admin/orders/random", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ platform, count }),
+  });
+  loadOrders();
+}
+
+function reportSapoSync(sapoSync) {
+  if (!sapoSync || sapoSync.skipped) return;
+  const failed = (sapoSync.steps || []).filter((s) => !s.ok);
+  if (failed.length) {
+    alert("Đồng bộ Sapo gặp lỗi:\n" + failed.map((s) => `- ${s.step}: ${s.error}`).join("\n"));
+  }
+}
+
+async function advance(id) {
+  const res = await fetch(`/admin/orders/${id}/advance`, { method: "POST" });
+  const data = await res.json();
+  reportSapoSync(data.sapoSync);
+  loadOrders();
+}
+
+async function cancelOrder(id) {
+  const res = await fetch(`/admin/orders/${id}/cancel`, { method: "POST" });
+  const data = await res.json();
+  reportSapoSync(data.sapoSync);
+  loadOrders();
+}
+
+async function resetAll() {
+  if (!confirm("Xóa toàn bộ đơn hàng demo?")) return;
+  await fetch("/admin/reset", { method: "POST" });
+  loadOrders();
+}
+
+async function saveWebhook() {
+  const url = document.getElementById("webhookInput").value.trim();
+  const res = await fetch("/admin/webhook", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const data = await res.json();
+  document.getElementById("webhookStatus").textContent = data.webhookUrl ? "✅ Đã lưu webhook" : "Chưa cấu hình webhook";
+}
+
+async function loadWebhookStatus() {
+  const res = await fetch("/admin/webhook");
+  const data = await res.json();
+  if (data.webhookUrl) {
+    document.getElementById("webhookInput").value = data.webhookUrl;
+    document.getElementById("webhookStatus").textContent = "✅ Đã lưu webhook";
+  }
+}
+
+async function saveSapoConfig() {
+  const domain = document.getElementById("sapoDomain").value.trim();
+  const apiKey = document.getElementById("sapoApiKey").value.trim();
+  const apiSecret = document.getElementById("sapoApiSecret").value.trim();
+  const res = await fetch("/admin/sapo-config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain, apiKey, apiSecret }),
+  });
+  const data = await res.json();
+  document.getElementById("sapoStatus").textContent = data.configured ? "✅ Đã kết nối Sapo" : "Chưa đủ thông tin";
+}
+
+async function loadSapoConfig() {
+  const res = await fetch("/admin/sapo-config");
+  const data = await res.json();
+  if (data.domain) document.getElementById("sapoDomain").value = data.domain;
+  if (data.apiKey) document.getElementById("sapoApiKey").value = data.apiKey;
+  document.getElementById("sapoStatus").textContent = data.configured ? "✅ Đã kết nối Sapo" : "Chưa cấu hình";
+}
+
+async function pushToSapo(id) {
+  const res = await fetch(`/admin/orders/${id}/push-to-sapo`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    alert("Đẩy vào Sapo thất bại: " + (data.message || data.error));
+    return;
+  }
+  reportSapoSync(data.sapoSync);
+  loadOrders();
+}
+
+async function removeFromSapo(id) {
+  if (!confirm("Xóa đơn này khỏi Sapo (đơn thật sẽ bị xóa)?")) return;
+  const res = await fetch(`/admin/orders/${id}/remove-from-sapo`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    alert("Xóa khỏi Sapo thất bại: " + (data.message || data.error));
+    return;
+  }
+  loadOrders();
+}
+
+loadOrders();
+loadWebhookStatus();
+loadSapoConfig();
+setInterval(loadOrders, 8000);
+</script>
+</body>
+</html>
